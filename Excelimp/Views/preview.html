@@ -1,0 +1,312 @@
+{template "header.html"}
+
+<div class="note note-success">
+    <p><i class="fa fa-file-excel-o"></i> 目标模块：<b>{$module_name}</b> ｜ 数据行数：<b>{$total}</b> 行 ｜ <a href="{dr_url('excelimp/home/index')}"><i class="fa fa-arrow-left"></i> 重新上传</a></p>
+</div>
+
+<input type="hidden" id="dr_file" value="{$file}">
+<input type="hidden" id="dr_mid" value="{$mid}">
+<input type="hidden" id="dr_catid" value="{$catid}">
+<input type="hidden" id="dr_skip" value="{$skip}">
+
+<form action="" class="form-horizontal" method="post" name="myform" id="myform">
+    {$form}
+
+    <div class="portlet light bordered">
+        <div class="portlet-title">
+            <div class="caption"><i class="fa fa-random"></i> 第二步：字段映射</div>
+            <div class="actions">
+                <button type="button" class="btn btn-sm blue" onclick="dr_auto_map()"><i class="fa fa-magic"></i> 自动匹配</button>
+            </div>
+        </div>
+        <div class="portlet-body form">
+            <table class="table table-striped table-bordered">
+                <thead>
+                <tr>
+                    <th style="width:50px;">列</th>
+                    <th>Excel列（表头/示例值）</th>
+                    <th style="width:320px;">映射到模块字段</th>
+                </tr>
+                </thead>
+                <tbody>
+                {loop $head $i $h}
+                <tr>
+                    <td>{$i+1}</td>
+                    <td class="dr_head_text">{htmlspecialchars((string)$h)}</td>
+                    <td>
+                        <select name="map[{$i}]" class="form-control dr_map_select">
+                            <option value="none">— 不导入 —</option>
+                            <optgroup label="系统">
+                                <option value="__catid__">栏目（按名称匹配）</option>
+                            </optgroup>
+                            {loop $fields $f}
+                            <option value="{$f.fieldname}">{$f.group}：{$f.name}（{$f.fieldname}）</option>
+                            {/loop}
+                        </select>
+                    </td>
+                </tr>
+                {/loop}
+                </tbody>
+            </table>
+            <p class="help-block">提示：将Excel每一列对应到模块字段。“标题”为必填字段；日期列请映射到日期字段，支持 2026-09-18、2026/09/18、Excel日期格式等。</p>
+        </div>
+    </div>
+
+    <div class="portlet light bordered">
+        <div class="portlet-title">
+            <div class="caption"><i class="fa fa-eye"></i> 数据预览（前{if $skip}9{else}8{/if}行，不包含表头）</div>
+        </div>
+        <div class="portlet-body">
+            <div class="table-responsive" style="max-height:300px;overflow:auto;">
+                <table class="table table-bordered table-hover">
+                    <thead>
+                    <tr>
+                        {loop $head $i $h}
+                        <th style="white-space:nowrap;">{$h}</th>
+                        {/loop}
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {loop $rows $r}
+                    <tr>
+                        {loop $head $i $h}
+                        <td style="white-space:nowrap;">{if isset($r[$i])}{htmlspecialchars((string)$r[$i])}{/if}</td>
+                        {/loop}
+                    </tr>
+                    {/loop}
+                    {if !$rows}
+                    <tr><td colspan="{if $head}{count($head)}{else}1{/if}" style="text-align:center;color:#999;">没有可预览的数据</td></tr>
+                    {/if}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="portlet light bordered">
+        <div class="portlet-title">
+            <div class="caption"><i class="fa fa-play"></i> 第三步：执行导入</div>
+        </div>
+        <div class="portlet-body form">
+            <div class="form-body">
+
+                <div class="form-group row">
+                    <label class="col-md-2 control-label">导入模式</label>
+                    <div class="col-md-9">
+                        <label class="radio-inline"><input type="radio" name="mode" value="add" checked> 全部导入（不检查重复）</label>
+                        <label class="radio-inline"><input type="radio" name="mode" value="skip"> 按标题去重（已存在的标题跳过）</label>
+                    </div>
+                </div>
+
+                <div class="form-group row">
+                    <label class="col-md-2 control-label">作者</label>
+                    <div class="col-md-9">
+                        <input type="text" name="author" class="form-control" style="width:300px;" value="{$author_name}">
+                        <p class="help-block">默认使用当前管理员；若Excel映射了“笔名”列且此处留空，则优先使用Excel中的笔名</p>
+                    </div>
+                </div>
+
+                <div class="form-group row">
+                    <label class="col-md-2 control-label"></label>
+                    <div class="col-md-9">
+                        <button type="button" class="btn green" id="dr_start_btn" onclick="dr_start_import()"><i class="fa fa-cloud-upload"></i> 开始导入（共{$total}条）</button>
+                    </div>
+                </div>
+
+                <div class="form-group row" id="dr_progress_body" style="display:none;">
+                    <label class="col-md-2 control-label">导入进度</label>
+                    <div class="col-md-9">
+                        <div class="progress" style="height:26px;">
+                            <div class="progress-bar progress-bar-striped active" id="dr_progress_bar" role="progressbar" style="width:0%;">0%</div>
+                        </div>
+                        <p id="dr_progress_text" class="help-block"></p>
+                    </div>
+                </div>
+
+                <div class="form-group row" id="dr_result_body" style="display:none;">
+                    <label class="col-md-2 control-label">导入结果</label>
+                    <div class="col-md-9">
+                        <div class="alert alert-success" id="dr_result_summary"></div>
+                        <div class="table-responsive" id="dr_result_fail" style="max-height:300px;overflow:auto;display:none;">
+                            <table class="table table-bordered">
+                                <thead><tr><th>行号</th><th>标题</th><th>失败原因</th></tr></thead>
+                                <tbody id="dr_result_fail_body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</form>
+
+<script type="text/javascript">
+var DR_FIELDS = {json_encode($fields)};
+
+// 根据表头自动匹配字段
+function dr_auto_map() {
+    var matched = 0;
+    $('#myform .dr_map_select').each(function () {
+        var head = $.trim($(this).closest('tr').find('.dr_head_text').text());
+        if (!head) {
+            return;
+        }
+        var sel = $(this);
+        var hit = '';
+        $.each(DR_FIELDS, function (k, f) {
+            if (hit) {
+                return;
+            }
+            // 按字段名精确匹配
+            if (head == f.fieldname) {
+                hit = f.fieldname;
+                return;
+            }
+            // 按字段中文名/英文名包含匹配
+            if (head && (f.name.indexOf(head) >= 0 || head.indexOf(f.name) >= 0 || f.fieldname.indexOf(head) >= 0)) {
+                hit = f.fieldname;
+                return;
+            }
+        });
+        if (head == '栏目' || head == '分类' || head == '栏目名称') {
+            hit = '__catid__';
+        }
+        if (hit) {
+            sel.val(hit);
+            matched++;
+        }
+    });
+    dr_tips(matched ? '已自动匹配 ' + matched + ' 列，请核对后导入' : '未找到可自动匹配的列，请手动选择', 2, 0);
+}
+
+// 分批导入
+var DR_IMPORT = null; // 当前导入任务状态
+
+function dr_start_import() {
+    var total = {$total};
+    if (!total) {
+        dr_tips('没有可导入的数据', 0);
+        return;
+    }
+    if (!confirm('确认开始导入 ' + total + ' 条数据？')) {
+        return;
+    }
+
+    DR_IMPORT = {
+        total: total,
+        start: 0,
+        limit: 200,
+        retry: 0,                          // 当前批次失败重试次数
+        stopped: false,                    // 是否已中断（等待手动续传）
+        busy: false,
+        sum: {success: 0, fail: 0, skip: 0},
+        fails: []
+    };
+
+    $('#dr_progress_body').show();
+    $('#dr_result_body').hide();
+    $('#dr_start_btn').attr('disabled', true);
+
+    dr_do_batch();
+}
+
+function dr_do_batch() {
+
+    var t = DR_IMPORT;
+    if (!t || t.stopped || t.busy) {
+        return;
+    }
+    t.busy = true;
+
+    // 表单序列化 + 追加参数
+    var data = $('#myform').serialize() + '&file=' + encodeURIComponent($('#dr_file').val())
+        + '&mid=' + encodeURIComponent($('#dr_mid').val())
+        + '&catid=' + encodeURIComponent($('#dr_catid').val())
+        + '&skip=' + encodeURIComponent($('#dr_skip').val())
+        + '&start=' + t.start + '&limit=' + t.limit;
+
+    $.ajax({
+        type: 'POST',
+        url: '{dr_url('excelimp/home/doimport')}',
+        data: data,
+        dataType: 'json',
+        timeout: 0,
+        success: function (res) {
+            t.busy = false;
+            if (!res.code) {
+                // 服务端返回错误（该批已回滚），提供续传入口
+                t.stopped = true;
+                dr_tips(res.msg, 0);
+                $('#dr_progress_body').show();
+                $('#dr_progress_text').append('<br><span class="font-red">已处理到第 ' + t.start + ' 条。</span> <a href="javascript:dr_resume_import();" class="btn btn-xs green">继续导入</a>');
+                return;
+            }
+            var d = res.data;
+            t.sum.success += d.success;
+            t.sum.fail += d.fail;
+            t.sum.skip += d.skip;
+            if (d.msgs && d.msgs.length) {
+                for (var i = 0; i < d.msgs.length; i++) {
+                    t.fails.push(d.msgs[i]);
+                }
+            }
+            var pct = Math.round(d.done * 100 / d.total);
+            $('#dr_progress_bar').css('width', pct + '%').text(pct + '%');
+            $('#dr_progress_text').text('已处理 ' + d.done + ' / ' + d.total + ' 条（成功' + t.sum.success + '，失败' + t.sum.fail + '，去重跳过' + t.sum.skip + '）');
+
+            if (d.finish) {
+                dr_import_done(t.sum, t.fails);
+            } else {
+                t.start = d.done;
+                t.retry = 0;
+                dr_do_batch();
+            }
+        },
+        error: function (xhr, status, err) {
+            t.busy = false;
+            // 网络/超时中断：当前批次事务已回滚，可安全重试同一批次
+            if (t.retry < 3) {
+                t.retry++;
+                $('#dr_progress_text').text('批次请求失败（第 ' + t.retry + ' / 3 次重试），正在重试... 已处理到第 ' + t.start + ' 条');
+                setTimeout(dr_do_batch, 2000);
+            } else {
+                t.stopped = true;
+                $('#dr_progress_text').append('<br><span class="font-red">请求中断：' + (status || '网络错误') + '，已处理到第 ' + t.start + ' 条。</span> <a href="javascript:dr_resume_import();" class="btn btn-xs green">继续导入</a>');
+            }
+        }
+    });
+}
+
+// 手动续传：从中断位置继续（未完成的批次已回滚，不会重复）
+function dr_resume_import() {
+    var t = DR_IMPORT;
+    if (!t) {
+        dr_tips('请先点击“开始导入”', 0);
+        return;
+    }
+    t.stopped = false;
+    t.retry = 0;
+    dr_tips('正在从上次位置继续导入，请查看进度条', 1);
+    dr_do_batch();
+}
+
+function dr_import_done(sum, fails) {
+    $('#dr_result_body').show();
+    $('#dr_result_summary').html(
+        '<b>导入完成：</b>成功 <b class="font-green">' + sum.success + '</b> 条，失败 <b class="font-red">' + sum.fail + '</b> 条，去重跳过 <b>' + sum.skip + '</b> 条。'
+    );
+    if (fails.length) {
+        var html = '';
+        for (var i = 0; i < fails.length; i++) {
+            html += '<tr><td>' + fails[i].row + '</td><td>' + (fails[i].title || '-') + '</td><td>' + fails[i].msg + '</td></tr>';
+        }
+        $('#dr_result_fail_body').html(html);
+        $('#dr_result_fail').show();
+        $('#dr_result_summary').append('<br>失败明细如下，可修正Excel后重新导入：');
+    }
+    $('#dr_progress_text').append('<a href="javascript:dr_update_cache();"><i class="fa fa-refresh"></i> 更新缓存后前台即可生效</a>');
+}
+</script>
+
+{template "footer.html"}

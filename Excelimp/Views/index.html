@@ -1,0 +1,99 @@
+{template "header.html"}
+
+<div class="note note-info">
+    <p><i class="fa fa-info-circle"></i> 使用步骤：选择目标模块与栏目 → 上传Excel文件 → 字段映射 → 确认导入。支持 <b>xlsx / xls / csv</b> 格式。</p>
+</div>
+
+<form action="" class="form-horizontal" method="post" name="myform" id="myform" enctype="multipart/form-data">
+    {$form}
+    <div class="portlet light bordered">
+        <div class="portlet-title tabbable-line">
+            <ul class="nav nav-tabs" style="float:left;">
+                <li class="active">
+                    <a href="#tab_0" data-toggle="tab"><i class="fa fa-file-excel-o"></i> 第一步：选择模块并上传Excel</a>
+                </li>
+            </ul>
+        </div>
+        <div class="portlet-body form">
+            <div class="tab-content">
+                <div class="tab-pane active" id="tab_0">
+                    <div class="form-body">
+
+                        <div class="form-group row">
+                            <label class="col-md-2 control-label">目标模块 <font color="red">*</font></label>
+                            <div class="col-md-9">
+                                <select name="mid" id="dr_mid" class="form-control" onchange="dr_change_module()">
+                                    <option value="">— 请选择模块 —</option>
+                                    {loop $module $t}
+                                    <option value="{$t.dirname}">{$t.name}（{$t.dirname}）</option>
+                                    {/loop}
+                                </select>
+                                <p class="help-block">数据将导入到所选模块的内容表中</p>
+                            </div>
+                        </div>
+
+                        <div class="form-group row">
+                            <label class="col-md-2 control-label">目标栏目 <font color="red">*</font></label>
+                            <div class="col-md-9">
+                                <select name="catid" id="dr_catid" class="form-control">
+                                    <option value="">— 请先选择模块 —</option>
+                                </select>
+                                <p class="help-block">导入的默认栏目；若Excel中包含“栏目”列（映射为“栏目（按名称匹配）”），将按栏目名称自动归类</p>
+                            </div>
+                        </div>
+
+                        <div class="form-group row">
+                            <label class="col-md-2 control-label">Excel文件 <font color="red">*</font></label>
+                            <div class="col-md-9">
+                                <input type="file" name="file" class="form-control" accept=".xlsx,.xls,.csv">
+                                <p class="help-block">支持 xlsx / xls / csv 格式，文件大小不超过20MB</p>
+                            </div>
+                        </div>
+
+                        <div class="form-group row">
+                            <label class="col-md-2 control-label">首行为表头</label>
+                            <div class="col-md-9">
+                                <label class="checkbox-inline">
+                                    <input type="checkbox" name="skip" value="1" checked> 跳过第一行（表头行），不导入
+                                </label>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="portlet-body form myfooter">
+        <div class="form-actions text-center">
+            <button type="submit" class="btn green"><i class="fa fa-upload"></i> 上传并进入字段映射</button>
+        </div>
+    </div>
+</form>
+
+<script type="text/javascript">
+var MODULES = {json_encode($module)};
+
+function dr_change_module() {
+    var mid = $('#dr_mid').val();
+    var html = '<option value="">— 请选择栏目 —</option>';
+    if (mid && MODULES) {
+        for (var i = 0; i < MODULES.length; i++) {
+            if (MODULES[i].dirname == mid) {
+                var cats = MODULES[i].cats || [];
+                for (var j = 0; j < cats.length; j++) {
+                    html += '<option value="' + cats[j].id + '">' + cats[j].name + '</option>';
+                }
+            }
+        }
+    }
+    $('#dr_catid').html(html);
+}
+
+$(function () {
+    dr_change_module();
+});
+</script>
+
+{template "footer.html"}
